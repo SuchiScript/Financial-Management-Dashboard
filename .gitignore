@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.env
+.venv
+instance/
+
+
+# Streamlit cache
+.streamlit/
+
+# Editor and build artifacts
+.vscode/
+*.sqlite3
+*.log
+pip-wheel-metadata/
+dist/
+build/
+__pycache__/

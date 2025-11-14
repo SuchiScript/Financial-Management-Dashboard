@@ -1,0 +1,7 @@
+Date,Category,Account,Type,Amount,Description
+2022-01-05,Salary,Checking,Income,5000,January salary
+2022-01-10,Rent,Checking,Expense,1200,January rent
+2022-01-12,Groceries,Checking,Expense,250,Weekly groceries
+2022-02-05,Salary,Checking,Income,5000,February salary
+2022-02-15,Utilities,Checking,Expense,150,Electricity bill
+2022-03-08,Transport,Checking,Expense,60,Bus pass

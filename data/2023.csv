@@ -1,0 +1,7 @@
+Date,Category,Account,Type,Amount,Description
+2023-01-05,Salary,Checking,Income,5200,January salary
+2023-01-10,Rent,Checking,Expense,1250,January rent
+2023-03-01,Freelance,Checking,Income,800,Project payment
+2023-03-05,Groceries,Checking,Expense,300,Weekly groceries
+2023-04-10,Utilities,Checking,Expense,170,Electricity bill
+2023-05-15,Transport,Checking,Expense,75,Taxi
