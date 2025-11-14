@@ -5,8 +5,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import mplcursors
 import seaborn as sns
 from pathlib import Path
+import plotly.graph_objects as go
+from matplotlib import cm, colors as mcolors
 from utils import read_csv_to_df, combine_dataframes, agg_monthly, agg_by_category_year
 
 st.set_page_config(page_title="Financial Dashboard", layout="wide")
@@ -78,41 +81,169 @@ with left_col:
     else:
         fig, ax = plt.subplots(figsize=(10, 5))
 
+        def palette_hex(cmap_name, n):
+            if n == 0:
+                return []
+            cmap = cm.get_cmap(cmap_name)
+            vals = cmap(np.linspace(0.35, 0.85, n))
+            return [mcolors.to_hex(v) for v in vals]
+
+
+        # ----------------------------- LINE CHART -----------------------------
         if chart_type == "Line":
-            ax.plot(monthly["YearMonth"], monthly["Income"], label="Income")
-            ax.plot(monthly["YearMonth"], monthly["Expense"], label="Expense")
-            ax.plot(monthly["YearMonth"], monthly["Net"], label="Net")
-            ax.set_title("Monthly Income / Expense / Net")
-            ax.legend()
+            fig = go.Figure()
 
+            fig.add_trace(go.Scatter(
+                x=monthly["YearMonth"],
+                y=monthly["Income"],
+                mode='lines+markers',
+                name='Income'
+            ))
+
+            fig.add_trace(go.Scatter(
+                x=monthly["YearMonth"],
+                y=monthly["Expense"],
+                mode='lines+markers',
+                name='Expense'
+            ))
+
+            fig.add_trace(go.Scatter(
+                x=monthly["YearMonth"],
+                y=monthly["Net"],
+                mode='lines+markers',
+                name='Net'
+            ))
+
+            fig.update_layout(
+                title="Monthly Income / Expense / Net",
+                xaxis_title="Month",
+                yaxis_title="Amount",
+                template="simple_white"
+            )
+
+
+        # ---------------------- SIDE-BY-SIDE STACKED BAR CHART ----------------------
         elif chart_type == "Bar":
-            ax.bar(monthly["YearMonth"], monthly["Income"], label="Income", alpha=0.7)
-            ax.bar(monthly["YearMonth"], -monthly["Expense"], label="Expense (neg)", alpha=0.7)
-            ax.set_title("Monthly Income and Expense")
-            ax.legend()
+            df_copy = df_filtered.copy()
+            df_copy["YearMonth"] = df_copy["Date"].dt.to_period("M").dt.to_timestamp()
 
+            income_df = df_copy[df_copy["Type"] == "Income"]
+            expense_df = df_copy[df_copy["Type"] == "Expense"]
+
+            income_pivot = income_df.pivot_table(
+                index="YearMonth", columns="Category", values="Amount",
+                aggfunc="sum", fill_value=0
+            )
+            expense_pivot = expense_df.pivot_table(
+                index="YearMonth", columns="Category", values="Amount",
+                aggfunc="sum", fill_value=0
+            )
+
+            # Sort categories by size
+            if not income_pivot.empty:
+                income_pivot = income_pivot[income_pivot.sum().sort_values(ascending=False).index]
+            if not expense_pivot.empty:
+                expense_pivot = expense_pivot[expense_pivot.sum().sort_values(ascending=False).index]
+
+            all_months = sorted(set(income_pivot.index) | set(expense_pivot.index))
+            x_str = [m.strftime("%Y-%m") for m in all_months]
+
+            income_pivot = income_pivot.reindex(all_months, fill_value=0)
+            expense_pivot = expense_pivot.reindex(all_months, fill_value=0)
+
+            income_colors = palette_hex("Blues", len(income_pivot.columns))
+            expense_colors = palette_hex("Oranges", len(expense_pivot.columns))
+
+            fig = go.Figure()
+
+            # Income bars (stacked)
+            for idx, col in enumerate(income_pivot.columns):
+                fig.add_trace(go.Bar(
+                    name=f"Income - {col}",
+                    x=x_str,
+                    y=income_pivot[col].values,
+                    offsetgroup="income",
+                    marker_color=income_colors[idx],
+                    hovertemplate="<b>%{x}</b><br>%{fullData.name}: %{y:,.2f}<extra></extra>",
+                ))
+
+            # Expense bars (stacked)
+            for idx, col in enumerate(expense_pivot.columns):
+                fig.add_trace(go.Bar(
+                    name=f"Expense - {col}",
+                    x=x_str,
+                    y=expense_pivot[col].values,
+                    offsetgroup="expense",
+                    marker_color=expense_colors[idx],
+                    hovertemplate="<b>%{x}</b><br>%{fullData.name}: %{y:,.2f}<extra></extra>",
+                ))
+
+            fig.update_layout(
+                title="Monthly Income & Expense Breakdown by Category",
+                barmode="stack",
+                xaxis_title="Month",
+                yaxis_title="Amount",
+                legend=dict(orientation="v", x=1.02, y=1),
+                template="simple_white",
+                margin=dict(l=40, r=260, t=60, b=80)
+            )
+
+
+        # ---------------------- STACKED BAR (INCOME+EXPENSE) ----------------------
         elif chart_type == "Stacked Bar":
-            ax.bar(monthly["YearMonth"], monthly["Income"], label="Income")
-            ax.bar(monthly["YearMonth"], -monthly["Expense"],
-                   bottom=monthly["Income"], label="Expense")
-            ax.set_title("Stacked Monthly Income vs Expense")
-            ax.legend()
+            fig = go.Figure()
 
+            fig.add_trace(go.Bar(
+                name="Income",
+                x=monthly["YearMonth"].dt.strftime("%Y-%m"),
+                y=monthly["Income"],
+                marker_color="#1f77b4"
+            ))
+
+            fig.add_trace(go.Bar(
+                name="Expense",
+                x=monthly["YearMonth"].dt.strftime("%Y-%m"),
+                y=monthly["Expense"],
+                marker_color="#ff7f0e"
+            ))
+
+            fig.update_layout(
+                title="Stacked Monthly Income and Expense",
+                barmode="stack",
+                xaxis_title="Month",
+                yaxis_title="Amount",
+                template="simple_white"
+            )
+
+
+        # ---------------------- PIE CHART (EXPENSE ONLY) ----------------------
         elif chart_type == "Pie":
-            total_by_cat = df_filtered.groupby("Category").agg(Total=("SignedAmount", "sum")).abs()
-            if total_by_cat.empty:
-                st.warning("No data for pie chart")
-            else:
-                ax.pie(
-                    total_by_cat["Total"],
-                    labels=total_by_cat.index,
-                    autopct="%.1f%%"
-                )
-                ax.set_title("Spending / Income share by Category")
+            expense_df = df_filtered[df_filtered["Type"] == "Expense"]
 
-        ax.set_xlabel("")
-        fig.autofmt_xdate()
-        st.pyplot(fig)
+            totals = (
+                expense_df.groupby("Category")["Amount"].sum()
+                .sort_values(ascending=False)
+            )
+
+            fig = go.Figure()
+
+            fig.add_trace(go.Pie(
+                labels=totals.index,
+                values=totals.values,
+                hole=0.4,  # donut for readability
+                textinfo="none",  # no labels on slices
+                hovertemplate="%{label}: %{value:,.2f}<extra></extra>"
+            ))
+
+            fig.update_layout(
+                title="Expense Share by Category",
+                legend=dict(orientation="v", x=1.02, y=1),
+                template="simple_white"
+            )
+
+
+        # ---------------------- RENDER PLOT ----------------------
+        st.plotly_chart(fig, use_container_width=True)
 
     # Yearly category comparison
     st.subheader("Category totals by Year")
